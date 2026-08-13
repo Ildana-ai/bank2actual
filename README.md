@@ -90,9 +90,9 @@ The format is auto-detected from the header row. Output convention: negative =
 money out, dates are `YYYY-MM-DD`.
 
 Every format above is **verified against real statements**, not just bank
-documentation — the maintainer runs all of these accounts through this tool.
-The output needs no adjustment in Actual's import dialog: columns and dates
-match what Actual auto-detects, so it's a straight import, every time.
+documentation, and the maintainer uses this tool for all of their own
+statements. The output needs no adjustment in Actual's import dialog: columns
+and dates match what Actual auto-detects, so it's a straight import, every time.
 
 For Bank of America checking exports, the converter also cross-checks its
 output against the "Total credits / Total debits" summary inside the statement
