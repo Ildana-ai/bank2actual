@@ -51,6 +51,24 @@ converter, same output. See [Command line](#command-line) below.
    settings are: date format `YYYY-MM-DD`, columns mapped
    Date / Payee / Notes / Amount, "flip amount" off.
 
+### Suggested workflow
+
+Keep a folder per account (`statements/checking`, `statements/travel card`, …)
+and drop each month's export into its folder before converting.
+
+Where the converted file lands is the browser's choice, not the page's — a web
+page can neither see where an input file came from nor write anywhere on its
+own. To control the destination:
+
+- **Chrome / Edge:** the **Save** button opens a save dialog — pick the
+  account's folder there. It reopens in the last-used folder next time.
+- **Safari / Firefox:** saves go to the download folder by default. In Safari,
+  **Settings → General → File download location → Ask for each download** gives
+  you a save dialog instead.
+- **Command line:** outputs land next to the input files automatically —
+  `python3 bank2actual.py statements/travel-card/*.pdf` writes each converted
+  file into that same folder.
+
 > **Tip:** Chase, Citi, and Amex also offer QFX ("Quicken") downloads, which
 > Actual imports natively with no converter needed. This tool is for the
 > accounts and date ranges where CSV or PDF is what you can get.
