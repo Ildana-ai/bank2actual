@@ -9,8 +9,9 @@
 
 # Bank → Actual
 
-Convert the CSV statement exports that US banks actually produce into files
-[Actual Budget](https://actualbudget.org) imports cleanly — in your browser or
+Convert the statement exports US banks actually produce — CSV files, and
+Chase credit-card PDF statements — into files
+[Actual Budget](https://actualbudget.org) imports cleanly, in your browser or
 from the command line. Nothing is uploaded anywhere; both tools run entirely on
 your own machine.
 
@@ -23,6 +24,36 @@ Everything is embedded in it — open it in any browser on any OS, no install.
 
 Prefer the command line? `bank2actual.py` lives in this repository — same
 converter, same output. See [Command line](#command-line) below.
+
+## How to use
+
+1. **Download** [`Bank2Actual.html`](https://github.com/Ildana-ai/bank2actual/releases/latest/download/Bank2Actual.html)
+   and keep it anywhere — Desktop is fine. It's one self-contained file;
+   opening it is the whole install.
+2. **Export a statement from your bank.** CSV from Bank of America, Chase,
+   Citi, or Amex — or the PDF statement for Chase cards that offer no CSV
+   download.
+3. **Open `Bank2Actual.html`** (double-click) and click **Select statement…**,
+   or drag the file onto the page.
+4. **Read the summary.** The tool names the bank format it detected, counts the
+   transactions, and — for Bank of America CSVs and Chase PDFs — proves the
+   math against the statement's own totals. If it doesn't reconcile, it refuses
+   to produce a file.
+5. **First import into a new account?** Tick **Include a Starting Balance row**
+   and convert the account's *earliest* statement, so the account balance
+   starts where the bank says it should. Skip the checkbox for every later
+   statement.
+6. **Name the output file and Save** — the save dialog lets you choose where it
+   lands.
+7. **In Actual:** select the account → **Import** → pick the converted file.
+   The columns and dates are named exactly what Actual expects, so the defaults
+   import correctly as-is — confirm and done. If anything ever looks off, the
+   settings are: date format `YYYY-MM-DD`, columns mapped
+   Date / Payee / Notes / Amount, "flip amount" off.
+
+> **Tip:** Chase, Citi, and Amex also offer QFX ("Quicken") downloads, which
+> Actual imports natively with no converter needed. This tool is for the
+> accounts and date ranges where CSV or PDF is what you can get.
 
 ## What is Actual?
 
@@ -39,6 +70,10 @@ America's case) malformed quoting. This tool normalizes all of that into a
 four-column CSV — `Date, Payee, Notes, Amount` — that maps straight into
 Actual's import dialog.
 
+Some Chase cards offer no CSV download at all — only PDF statements. The tool
+reads those too: text is extracted locally, and the output is refused unless
+every transaction reconciles against the statement's own balances.
+
 ## Supported formats
 
 | Bank | Export | Quirks handled |
@@ -53,6 +88,11 @@ Actual's import dialog.
 
 The format is auto-detected from the header row. Output convention: negative =
 money out, dates are `YYYY-MM-DD`.
+
+Every format above is **verified against real statements**, not just bank
+documentation — the maintainer runs all of these accounts through this tool.
+The output needs no adjustment in Actual's import dialog: columns and dates
+match what Actual auto-detects, so it's a straight import, every time.
 
 For Bank of America checking exports, the converter also cross-checks its
 output against the "Total credits / Total debits" summary inside the statement
@@ -78,6 +118,7 @@ Python 3.8+, standard library only, any OS:
 
 ```bash
 python3 bank2actual.py statement.csv
+python3 bank2actual.py chase-statement.pdf
 python3 bank2actual.py *.csv --outdir converted --merge my-checking
 ```
 
@@ -88,17 +129,10 @@ statements while preserving legitimate same-day duplicate charges.
 CSV conversion needs nothing beyond the standard library. Chase PDF statements
 additionally need [pypdf](https://pypi.org/project/pypdf/) (`pip install pypdf`).
 
-## Importing into Actual
-
-1. Select the account → **Import** → choose the converted `-actual.csv` file.
-2. Set the date format to `YYYY-MM-DD`, map Date / Payee / Notes / Amount.
-3. Leave "flip amount" off — the converter already outputs negative-for-outflow.
-
-Actual remembers the mapping per account, so this is one-time setup.
-
-> **Tip:** Chase, Citi, and Amex also offer QFX ("Quicken") downloads, which
-> Actual imports natively with no mapping at all. This converter is for the
-> accounts and date ranges where CSV is what you can get.
+**macOS note:** the system may block Terminal from reading files in Downloads
+or Desktop (`Operation not permitted` — even with `sudo`). Grant Terminal
+access under System Settings → Privacy & Security → Files & Folders, or move
+the statement to an unprotected folder first.
 
 ## License & disclaimer
 
