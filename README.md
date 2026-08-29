@@ -147,6 +147,21 @@ export carries the bank's own reference number (Bank of America credit cards),
 that dedupe keys on the reference — so a charge whose description changed
 between exports (pending vs. posted) still counts only once.
 
+`--format` chooses the output layout (CLI only; the browser tool always
+produces the Actual layout):
+
+- `actual` (default) — `Date,Payee,Notes,Amount`, today's behavior and
+  filenames, nothing changes for existing users.
+- `generic` — `Date,Description,Category,Amount,Reference`, a plain
+  spreadsheet layout that opens directly in Excel or Google Sheets — no
+  converter-side xlsx needed. The Reference column carries the bank's own
+  transaction reference where the export has one.
+- `ynab` — `Date,Payee,Memo,Outflow,Inflow`, matching the fields
+  [YNAB's file-based import](https://support.ynab.com/en_us/formatting-a-csv-file-an-overview-BJvczkuRq)
+  maps CSV columns to, with amounts split into positive Outflow/Inflow.
+  **Experimental:** the layout follows YNAB's documented import fields but has
+  not yet been verified against a real YNAB import.
+
 CSV conversion needs nothing beyond the standard library. Chase PDF statements
 additionally need [pypdf](https://pypi.org/project/pypdf/) (`pip install pypdf`).
 

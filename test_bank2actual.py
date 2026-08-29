@@ -59,3 +59,19 @@ def test_output_keeps_four_columns(tmp_path):
     lines = out.read_text().splitlines()
     assert lines[0] == "Date,Payee,Notes,Amount"
     assert lines[1] == "2026-08-01,SQ *COFFEE,,-4.50"
+
+
+def test_ynab_and_generic_formats(tmp_path):
+    rows = rows_from(tmp_path, "a.csv", BOFA_CARD
+                     + "08/01/2026,2469001,COFFEE,,-4.50\n"
+                     + "08/02/2026,2469002,REFUND,,10.00\n")
+    out = tmp_path / "o.csv"
+    b2a.write_out(out, rows, "ynab")
+    lines = out.read_text().splitlines()
+    assert lines[0] == "Date,Payee,Memo,Outflow,Inflow"
+    assert lines[1] == "2026-08-01,COFFEE,,4.50,"
+    assert lines[2] == "2026-08-02,REFUND,,,10.00"
+    b2a.write_out(out, rows, "generic")
+    lines = out.read_text().splitlines()
+    assert lines[0] == "Date,Description,Category,Amount,Reference"
+    assert lines[1] == "2026-08-01,COFFEE,,-4.50,2469001"

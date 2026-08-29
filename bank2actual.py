@@ -2,7 +2,7 @@
 """Convert bank CSV exports (BofA, Chase, Citi, Amex) into Actual-ready CSVs.
 
 Output columns: Date,Payee,Notes,Amount  (ISO dates, negative = money out).
-Usage: bank2actual.py FILE [FILE ...] [--outdir DIR] [--merge NAME]
+Usage: bank2actual.py FILE [FILE ...] [--outdir DIR] [--merge NAME] [--format actual|generic|ynab]
 """
 
 import argparse
@@ -13,7 +13,11 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-OUT_HEADER = ["Date", "Payee", "Notes", "Amount"]
+FORMAT_HEADERS = {
+    "actual": ["Date", "Payee", "Notes", "Amount"],
+    "generic": ["Date", "Description", "Category", "Amount", "Reference"],
+    "ynab": ["Date", "Payee", "Memo", "Outflow", "Inflow"],
+}
 
 # (bank key, set of column names that identify the header row)
 SIGNATURES = [
@@ -298,20 +302,31 @@ def merge_rows(per_file_rows):
     return sorted(merged, key=lambda r: r[:4])
 
 
-def write_out(path, rows):
+def shape_row(row, fmt):
+    date, payee, notes, amount, ref = row
+    if fmt == "generic":
+        return [date, payee, notes, amount, ref or ""]
+    if fmt == "ynab":  # YNAB wants positive amounts in split Outflow/Inflow columns
+        return [date, payee, notes, -amount, ""] if amount < 0 else [date, payee, notes, "", amount]
+    return [date, payee, notes, amount]
+
+
+def write_out(path, rows, fmt="actual"):
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(OUT_HEADER)
+        w.writerow(FORMAT_HEADERS[fmt])
         for row in rows:
-            w.writerow(row[:4])
+            w.writerow(shape_row(row, fmt))
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--version", action="version", version="bank2actual 1.2.0")
+    ap.add_argument("--version", action="version", version="bank2actual 1.3.0")
     ap.add_argument("files", nargs="+", type=Path)
     ap.add_argument("--outdir", type=Path, help="output directory (default: next to each input)")
-    ap.add_argument("--merge", metavar="NAME", help="also merge all converted rows into NAME.actual.csv, deduped across files")
+    ap.add_argument("--merge", metavar="NAME", help="also merge all converted rows into one file, deduped across files")
+    ap.add_argument("--format", choices=["actual", "generic", "ynab"], default="actual",
+                    help="output layout: actual (default), generic spreadsheet, or ynab (experimental)")
     args = ap.parse_args()
 
     if args.outdir:
@@ -330,8 +345,8 @@ def main():
             continue
         rows = sorted(result["rows"], key=lambda r: r[:4])
         outdir = args.outdir or path.parent
-        out_path = outdir / (path.stem + "-actual.csv")
-        write_out(out_path, rows)
+        out_path = outdir / f"{path.stem}-{args.format}.csv"
+        write_out(out_path, rows, args.format)
         line = f"OK    {path.name} -> {out_path}  [{bank}] {len(rows)} txns"
         if result["skipped"]:
             line += f", {result['skipped']} non-transaction rows skipped"
@@ -349,8 +364,8 @@ def main():
     if args.merge and per_file_rows:
         rows = merge_rows(per_file_rows)
         outdir = args.outdir or args.files[0].parent
-        out_path = outdir / f"{args.merge}-actual.csv"
-        write_out(out_path, rows)
+        out_path = outdir / f"{args.merge}-{args.format}.csv"
+        write_out(out_path, rows, args.format)
         print(f"MERGE -> {out_path}  {len(rows)} txns from {len(per_file_rows)} files")
 
     sys.exit(1 if failures else 0)
