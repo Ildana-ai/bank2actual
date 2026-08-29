@@ -142,7 +142,10 @@ python3 bank2actual.py *.csv --outdir converted --merge my-checking
 
 Each input becomes `<name>-actual.csv`. `--merge` additionally combines all
 inputs into one file, deduplicating transactions that appear in overlapping
-statements while preserving legitimate same-day duplicate charges.
+statements while preserving legitimate same-day duplicate charges. Where the
+export carries the bank's own reference number (Bank of America credit cards),
+that dedupe keys on the reference — so a charge whose description changed
+between exports (pending vs. posted) still counts only once.
 
 CSV conversion needs nothing beyond the standard library. Chase PDF statements
 additionally need [pypdf](https://pypi.org/project/pypdf/) (`pip install pypdf`).

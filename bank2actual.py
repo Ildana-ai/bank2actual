@@ -81,6 +81,13 @@ def parse_amount(raw):
         return None
 
 
+def clean_ref(raw):
+    """A usable bank transaction reference. BofA reuses blank/zero for some rows,
+    so those count as no-ref and fall back to row-equality dedupe."""
+    s = (raw or "").strip()
+    return s if s.strip("0") else None
+
+
 def parse_date(raw):
     s = (raw or "").strip()
     for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"):
@@ -181,7 +188,7 @@ def parse_chase_pdf(lines):
     out = []
     for mo, d, desc, cents in raw:
         year = cy - 1 if (mo, d) > (cm, cd) else cy
-        out.append((f"{year:04d}-{mo:02d}-{d:02d}", desc, "", Decimal(-cents).scaleb(-2)))
+        out.append((f"{year:04d}-{mo:02d}-{d:02d}", desc, "", Decimal(-cents).scaleb(-2), None))
     return {"rows": out, "skipped": 0, "recon": (prev, new_bal), "opening": opening}, None
 
 
@@ -208,6 +215,9 @@ def convert(path):
     bank, idx, header = detect(src_rows)
     if bank is None:
         return None, None, "unrecognized format (no known header in first 25 lines)"
+    # Rows are (date, payee, notes, amount, ref) internally; ref is the bank's own
+    # transaction reference where the export carries one, else None. Only the first
+    # four columns are ever written out.
     out, skipped = [], 0
     for r in records_after(src_rows, idx, header):
         if bank == "bofa-bank":
@@ -215,26 +225,26 @@ def convert(path):
             if amt is None:  # balance rows carry no amount
                 skipped += 1
                 continue
-            out.append((parse_date(r["Date"]), r["Description"], "", amt))
+            out.append((parse_date(r["Date"]), r["Description"], "", amt, None))
         elif bank == "bofa-card":
             amt = parse_amount(r["Amount"])
             if amt is None:
                 skipped += 1
                 continue
-            out.append((parse_date(r["Posted Date"]), r["Payee"], "", amt))
+            out.append((parse_date(r["Posted Date"]), r["Payee"], "", amt, clean_ref(r.get("Reference Number"))))
         elif bank == "chase-card":
             amt = parse_amount(r["Amount"])
             if amt is None:
                 skipped += 1
                 continue
             notes = " / ".join(x for x in (r.get("Category", ""), r.get("Memo", "")) if x)
-            out.append((parse_date(r["Transaction Date"]), r["Description"], notes, amt))
+            out.append((parse_date(r["Transaction Date"]), r["Description"], notes, amt, None))
         elif bank == "chase-bank":
             amt = parse_amount(r["Amount"])
             if amt is None:
                 skipped += 1
                 continue
-            out.append((parse_date(r["Posting Date"]), r["Description"], r.get("Type", ""), amt))
+            out.append((parse_date(r["Posting Date"]), r["Description"], r.get("Type", ""), amt, None))
         elif bank == "citi-card":
             if r.get("Status", "").lower() == "pending":  # pending rows change on settle; re-import would duplicate
                 skipped += 1
@@ -244,14 +254,14 @@ def convert(path):
             if debit == 0 and credit == 0:
                 skipped += 1
                 continue
-            out.append((parse_date(r["Date"]), r["Description"], "", credit - debit))
+            out.append((parse_date(r["Date"]), r["Description"], "", credit - debit, None))
         elif bank == "amex-card":
             amt = parse_amount(r["Amount"])
             if amt is None:
                 skipped += 1
                 continue
             notes = r.get("Category", "") or r.get("Extended Details", "")[:80]
-            out.append((parse_date(r["Date"]), r["Description"], notes, -amt))  # Amex: positive = charge
+            out.append((parse_date(r["Date"]), r["Description"], notes, -amt, None))  # Amex: positive = charge
     bad = [t for t in out if t[0] is None]
     if bad:
         return None, None, f"{len(bad)} rows had unparseable dates"
@@ -262,10 +272,30 @@ def verify_bofa(src_rows, rows):
     totals = bofa_summary(src_rows)
     if not totals:
         return None
-    credits = sum(a for *_, a in rows if a > 0)
-    debits = sum(a for *_, a in rows if a < 0)
+    credits = sum(r[3] for r in rows if r[3] > 0)
+    debits = sum(r[3] for r in rows if r[3] < 0)
     ok = credits == totals.get("credits") and debits == totals.get("debits")
     return ok, credits, debits, totals
+
+
+def merge_rows(per_file_rows):
+    """Cross-file dedupe in two passes. Rows carrying a bank reference dedupe on it —
+    first file wins — so the same charge survives once even when the bank rewrote the
+    description between exports (pending vs. posted). Rows without one keep the max
+    count of each identical txn seen in any single file, so cross-file overlap dedupes
+    but legit same-day duplicates within a file survive."""
+    seen_refs, with_ref, without = set(), [], Counter()
+    for rows in per_file_rows:
+        counts = Counter()
+        for row in rows:
+            if row[4] is None:
+                counts[row[:4]] += 1
+            elif row[4] not in seen_refs:
+                seen_refs.add(row[4])
+                with_ref.append(row)
+        without |= counts
+    merged = with_ref + [r + (None,) for r in without.elements()]
+    return sorted(merged, key=lambda r: r[:4])
 
 
 def write_out(path, rows):
@@ -273,12 +303,12 @@ def write_out(path, rows):
         w = csv.writer(f)
         w.writerow(OUT_HEADER)
         for row in rows:
-            w.writerow(row)
+            w.writerow(row[:4])
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--version", action="version", version="bank2actual 1.1.3")
+    ap.add_argument("--version", action="version", version="bank2actual 1.2.0")
     ap.add_argument("files", nargs="+", type=Path)
     ap.add_argument("--outdir", type=Path, help="output directory (default: next to each input)")
     ap.add_argument("--merge", metavar="NAME", help="also merge all converted rows into NAME.actual.csv, deduped across files")
@@ -298,7 +328,7 @@ def main():
             print(f"SKIP  {path.name}: {err}")
             failures += 1
             continue
-        rows = sorted(result["rows"])
+        rows = sorted(result["rows"], key=lambda r: r[:4])
         outdir = args.outdir or path.parent
         out_path = outdir / (path.stem + "-actual.csv")
         write_out(out_path, rows)
@@ -314,15 +344,10 @@ def main():
             prev, new_bal = result["recon"]
             line += f" | reconciled: previous balance {prev / 100:.2f} -> new balance {new_bal / 100:.2f}"
         print(line)
-        per_file_rows.append(Counter(rows))
+        per_file_rows.append(rows)
 
     if args.merge and per_file_rows:
-        # Overlapping statements: keep the max count of each identical txn seen in any one file,
-        # so cross-file overlap dedupes but legit same-day duplicates within a file survive.
-        merged = Counter()
-        for c in per_file_rows:
-            merged |= c
-        rows = sorted(merged.elements())
+        rows = merge_rows(per_file_rows)
         outdir = args.outdir or args.files[0].parent
         out_path = outdir / f"{args.merge}-actual.csv"
         write_out(out_path, rows)
