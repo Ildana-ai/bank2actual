@@ -1,0 +1,23 @@
+Bank2Actual — third-party components and brand notice
+
+This file records components distributed with Bank2Actual that carry their own
+licences, and the one carve-out to the MIT licence in LICENSE. It is kept
+separate from LICENSE so that automated licence detection reads this project
+correctly as MIT.
+
+Michroma typeface
+  Copyright 2011 The Michroma Project Authors
+  https://github.com/googlefonts/Michroma-font
+  Licensed under the SIL Open Font License 1.1 — see OFL.txt.
+  Embedded in Bank2Actual.html.
+
+Mozilla PDF.js v3.11.174
+  Copyright Mozilla Foundation and contributors
+  https://github.com/mozilla/pdf.js
+  Licensed under the Apache License, Version 2.0
+  https://www.apache.org/licenses/LICENSE-2.0
+  Embedded in Bank2Actual.html.
+
+Brand
+  The Ildana name, logo, and brand artwork are not covered by the MIT licence
+  and may not be used to represent other projects or organizations.

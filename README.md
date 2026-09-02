@@ -36,9 +36,10 @@ converter, same output. See [Command line](#command-line) below.
 3. **Open `Bank2Actual.html`** (double-click) and click **Select statement…**,
    or drag the file onto the page.
 4. **Read the summary.** The tool names the bank format it detected, counts the
-   transactions, and — for Bank of America CSVs and Chase PDFs — proves the
-   math against the statement's own totals. If it doesn't reconcile, it refuses
-   to produce a file.
+   transactions, and checks the math against the statement's own totals where
+   the export carries them. For a Chase PDF, a statement that doesn't reconcile
+   produces no file. For a Bank of America checking CSV, the summary says
+   whether the totals match or not; read it before you import.
 5. **First import into a new account?** Tick **Include a Starting Balance row**
    and convert the account's *earliest* statement, so the account balance
    starts where the bank says it should. Skip the checkbox for every later
@@ -107,14 +108,15 @@ every transaction reconciles against the statement's own balances.
 The format is auto-detected from the header row. Output convention: negative =
 money out, dates are `YYYY-MM-DD`.
 
-Every format above is **verified against real statements**, not just bank
-documentation, and the maintainer uses this tool for all of their own
-statements. The output needs no adjustment in Actual's import dialog: columns
-and dates match what Actual auto-detects, so it's a straight import, every time.
+Every format above was worked out against real statements, not just the
+banks' documentation. The output needs no adjustment in Actual's import dialog:
+columns and dates match what Actual auto-detects.
 
 For Bank of America checking exports, the converter also cross-checks its
 output against the "Total credits / Total debits" summary inside the statement
-itself and refuses to hand you a file that doesn't reconcile.
+and reports `totals MATCH` or `totals MISMATCH` in the summary line. A mismatch
+still writes the file, so you can inspect it, but do not import it until you
+know why.
 
 ## Browser tool (no install)
 
@@ -140,7 +142,9 @@ python3 bank2actual.py chase-statement.pdf
 python3 bank2actual.py *.csv --outdir converted --merge my-checking
 ```
 
-Each input becomes `<name>-actual.csv`. `--merge` additionally combines all
+Each input becomes `<name>-actual.csv` (or `<name>-generic.csv` /
+`<name>-ynab.csv` under `--format`). `--merge NAME` writes everything to one
+`NAME-actual.csv` (or `NAME-<format>.csv`) instead. `--version` prints the version. `--merge` combines all
 inputs into one file, deduplicating transactions that appear in overlapping
 statements while preserving legitimate same-day duplicate charges. Where the
 export carries the bank's own reference number (Bank of America credit cards),
@@ -163,7 +167,11 @@ produces the Actual layout):
   not yet been verified against a real YNAB import.
 
 CSV conversion needs nothing beyond the standard library. Chase PDF statements
-additionally need [pypdf](https://pypi.org/project/pypdf/) (`pip install pypdf`).
+additionally need [pypdf](https://pypi.org/project/pypdf/) 4.0 or newer
+(`pip install "pypdf>=4"`); older releases lack the layout extraction mode the
+parser relies on.
+
+To run the tests: `pip install pytest` then `pytest` in the repository root.
 
 **macOS note:** the system may block Terminal from reading files in Downloads
 or Desktop (`Operation not permitted` — even with `sudo`). Grant Terminal
@@ -172,10 +180,11 @@ the statement to an unprotected folder first.
 
 ## License & disclaimer
 
-Code is [MIT](LICENSE) — provided as-is, without warranty of any kind. The
-embedded Michroma typeface is licensed under the
-[SIL Open Font License 1.1](OFL.txt). The Ildana name, logo, and brand artwork
-are not covered by the MIT license.
+Code is [MIT](LICENSE), provided as-is, without warranty of any kind.
+Third-party components embedded in the browser tool (the Michroma typeface
+under the [SIL Open Font License 1.1](OFL.txt), Mozilla PDF.js under
+Apache-2.0) and the brand carve-out are listed in [NOTICE](NOTICE). Security
+issues: see [SECURITY.md](SECURITY.md).
 
 This project is not affiliated with or endorsed by Actual Budget, Bank of
 America, JPMorgan Chase, Citi, or American Express; their names are used only
