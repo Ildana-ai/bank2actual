@@ -134,7 +134,7 @@ only when a PDF is dropped.
 
 ## Command line
 
-Python 3.8+, standard library only, any OS:
+Python 3.10+, standard library only, any OS (older versions may still work, they are just no longer tested):
 
 ```bash
 python3 bank2actual.py statement.csv
