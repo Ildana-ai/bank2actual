@@ -321,7 +321,7 @@ def write_out(path, rows, fmt="actual"):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--version", action="version", version="bank2actual 1.3.0")
+    ap.add_argument("--version", action="version", version="bank2actual 1.3.1")
     ap.add_argument("files", nargs="+", type=Path)
     ap.add_argument("--outdir", type=Path, help="output directory (default: next to each input)")
     ap.add_argument("--merge", metavar="NAME", help="also merge all converted rows into one file, deduped across files")
