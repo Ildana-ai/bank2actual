@@ -75,3 +75,20 @@ def test_ynab_and_generic_formats(tmp_path):
     lines = out.read_text().splitlines()
     assert lines[0] == "Date,Description,Category,Amount,Reference"
     assert lines[1] == "2026-08-01,COFFEE,,-4.50,2469001"
+
+
+def test_chase_pdf_keeps_amounts_under_a_dollar():
+    # Chase prints sub-$1 amounts with no leading zero (".55", "-.11")
+    lines = [
+        "chase.com/cardhelp",
+        "Opening/Closing Date 06/08/26 - 07/07/26",
+        "Previous Balance $0.00",
+        "New Balance $10.44",
+        "06/21 Example Store Springfield ST -.11",
+        "06/21 Example Store Springfield ST .11",
+        "06/28 Corner Market #123 SPRINGFIELD ST .55",
+        "06/29 Grocery Co SPRINGFIELD ST 9.89",
+    ]
+    result, err = b2a.parse_chase_pdf(lines)
+    assert err is None, err
+    assert [str(r[3]) for r in result["rows"]] == ["0.11", "-0.11", "-0.55", "-9.89"]

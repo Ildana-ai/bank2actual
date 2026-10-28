@@ -356,7 +356,7 @@ function parseChasePdf(lines) {
     if (m) { prev = money(m[1]); continue; }
     m = line.match(/New Balance\s+(-?\$[\d,]+\.\d{2})$/);
     if (m) { newBal = money(m[1]); continue; }
-    m = line.match(/^(\d{2})\/(\d{2})\s+(.+?)\s+(-?\$?[\d,]+\.\d{2})$/);
+    m = line.match(/^(\d{2})\/(\d{2})\s+(.+?)\s+(-?\$?[\d,]*\.\d{2})$/);
     if (m) raw.push({ mo: +m[1], d: +m[2], desc: m[3], cents: money(m[4]) });
   }
   if (!closing) return { error: "could not find the Opening/Closing Date line" };

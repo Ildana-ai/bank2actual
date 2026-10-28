@@ -175,7 +175,7 @@ def parse_chase_pdf(lines):
         if m:
             new_bal = money(m.group(1))
             continue
-        m = _re.match(r"^(\d{2})/(\d{2})\s+(.+?)\s+(-?\$?[\d,]+\.\d{2})$", line)
+        m = _re.match(r"^(\d{2})/(\d{2})\s+(.+?)\s+(-?\$?[\d,]*\.\d{2})$", line)
         if m:
             raw.append((int(m.group(1)), int(m.group(2)), m.group(3), money(m.group(4))))
     if closing is None:
