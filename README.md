@@ -104,6 +104,7 @@ every transaction reconciles against the statement's own balances.
 | Citi | credit card | split Debit/Credit columns merged into one signed amount; **Pending rows dropped** (they change when they settle and would duplicate on re-import) |
 | American Express | credit card | sign convention flipped (Amex exports charges as positive) |
 | Chase | credit card **PDF statement** | for accounts where Chase offers no CSV download: text is extracted locally (embedded [PDF.js](https://github.com/mozilla/pdf.js) in the browser tool, [pypdf](https://pypi.org/project/pypdf/) for the CLI), transaction year is derived from the statement period, and the output is **refused unless every transaction reconciles** against the statement's own Previous → New Balance |
+| Chase | checking **PDF statement** | **CLI only for now.** For statements older than Chase's CSV download window: multi-line descriptions (wire/transfer details) → Notes, single-account statements only. The extracted text can glue a line's amount and balance together, list them balance-first, or attach card digits to them, so **every row is checked against the statement's running balance** from Beginning to Ending Balance; the statement is refused unless exactly one reading fits |
 
 The format is auto-detected from the header row. Output convention: negative =
 money out, dates are `YYYY-MM-DD`.
@@ -150,6 +151,12 @@ statements while preserving legitimate same-day duplicate charges. Where the
 export carries the bank's own reference number (Bank of America credit cards),
 that dedupe keys on the reference — so a charge whose description changed
 between exports (pending vs. posted) still counts only once.
+
+When merging Chase checking PDF statements, `NOTE` lines report the dates they
+cover and any point where one statement's Ending Balance isn't the next one's
+Beginning Balance — expected if those months come from other files (a CSV, or
+months already in Actual), otherwise a sign that a statement is missing. The
+notes are informational only: the merged file is always written.
 
 `--format` chooses the output layout (CLI only; the browser tool always
 produces the Actual layout):
