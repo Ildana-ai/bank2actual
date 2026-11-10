@@ -10,7 +10,7 @@
 # Bank → Actual
 
 Convert the statement exports US banks actually produce — CSV files, and
-Chase credit-card PDF statements — into files
+Chase PDF statements (credit card; checking from the command line) — into files
 [Actual Budget](https://actualbudget.org) imports cleanly, in your browser or
 from the command line. Nothing is uploaded anywhere; both tools run entirely on
 your own machine.
@@ -91,7 +91,9 @@ Actual's import dialog.
 
 Some Chase cards offer no CSV download at all — only PDF statements. The tool
 reads those too: text is extracted locally, and the output is refused unless
-every transaction reconciles against the statement's own balances.
+every transaction reconciles against the statement's own balances. The same
+goes for Chase checking statements older than Chase's CSV download window; the
+command line reads those PDFs as well.
 
 ## Supported formats
 
