@@ -196,6 +196,116 @@ def parse_chase_pdf(lines):
     return {"rows": out, "skipped": 0, "recon": (prev, new_bal), "opening": opening}, None
 
 
+def parse_chase_checking_pdf(lines):
+    """Chase checking statement PDF (CLI only for now). Statement signs already mean
+    negative = money out; description continuation lines go to Notes. pypdf may glue a
+    line's amount and balance together, emit them balance-first, or glue card digits
+    onto them, so every possible reading is chained through the running balance from
+    Beginning to Ending Balance; output is refused unless exactly one chain fits."""
+    import re as _re
+
+    money_pat = r"-?\s?\$?[\d,]+\.\d{2}"
+    period_re = _re.compile(r"([A-Z][a-z]+ \d{1,2}, \d{4}) through ([A-Z][a-z]+ \d{1,2}, \d{4})")
+    bal_re = _re.compile(rf"^(Beginning|Ending) Balance\s+({money_pat})$")
+    ends_re = _re.compile(r"(?=(?:0|[1-9]\d{0,2})(?:,\d{3})*\.\d{2}\Z)")
+
+    def money(s):
+        return parse_amount(s.replace(" ", ""))
+
+    def readings(rest):
+        """Every (description, amount, balance) the line's two trailing numbers could mean."""
+        out = set()
+        for j in (m.start() for m in ends_re.finditer(rest)):
+            glued = rest[j - 1:j].isdigit()
+            head = rest[:j].rstrip(" $")
+            neg_mid = head.endswith("-")
+            head = head.rstrip("-").rstrip(" $")
+            for i in (m.start() for m in ends_re.finditer(head)):
+                desc = head[:i]
+                if _re.search(r"[,.]\d*\Z", desc):  # would split a number, not peel off card digits
+                    continue
+                desc = desc.rstrip(" $")
+                neg_lead = desc.endswith("-")
+                desc = desc.rstrip("-").strip()
+                if not desc:
+                    continue
+                a, b = Decimal(head[i:].replace(",", "")), Decimal(rest[j:].replace(",", ""))
+                if neg_lead and neg_mid:
+                    signs = [(-1, -1)]
+                elif neg_lead or neg_mid:
+                    signs = [(-1, 1), (1, -1)]
+                else:
+                    signs = [(1, 1)]
+                for x, y in ((a, b), (b, a)) if glued else ((a, b),):
+                    out.update((desc, sx * x, sy * y) for sx, sy in signs)
+        return out
+
+    if not any("jpmorgan chase bank" in l.lower() for l in lines) or not any(l.startswith("CHECKING SUMMARY") for l in lines):
+        return None, "not a recognized Chase credit-card or checking statement PDF"
+    opening = closing = None
+    for line in lines:
+        m = period_re.search(line)
+        if m:
+            try:
+                opening, closing = (datetime.strptime(s, "%B %d, %Y").date() for s in m.groups())
+            except ValueError:
+                pass
+            break
+    begin, end, in_detail, cur = None, None, False, None
+    raw = []
+    for line in lines:
+        if line.startswith("TRANSACTION DETAIL"):
+            if end is not None:
+                return None, "more than one account in this statement; only single-account statements are supported"
+            in_detail, cur = True, None
+            continue
+        if not in_detail:
+            continue
+        m = bal_re.match(line)
+        if m:
+            if m.group(1) == "Beginning":
+                begin = money(m.group(2))
+            else:
+                end, in_detail = money(m.group(2)), False
+            cur = None
+            continue
+        m = _re.match(r"(\d{2})/(\d{2})\s+(.+)", line)
+        if m:
+            options = readings(m.group(3))
+            if not options:
+                return None, f"could not read the amounts of the {m.group(1)}/{m.group(2)} transaction"
+            cur = [int(m.group(1)), int(m.group(2)), options, []]
+            raw.append(cur)
+        elif line.startswith(("*", "Page ", "Account Number", "DATE DESCRIPTION")) or period_re.search(line):
+            cur = None  # page break artifacts never belong to a transaction
+        elif cur:
+            cur[3].append(line)
+    if closing is None:
+        return None, "could not find the statement period line"
+    if begin is None or end is None:
+        return None, "could not find Beginning/Ending Balance in the transaction detail"
+    states = {begin: []}  # running balance -> rows reaching it; None once two readings do
+    for mo, d, options, notes in raw:
+        nxt = {}
+        for prev, rows in states.items():
+            for desc, amount, bal in options:
+                if prev + amount == bal:
+                    nxt[bal] = None if rows is None or bal in nxt else rows + [(mo, d, desc, notes, amount)]
+        if not nxt:
+            return None, f"does not reconcile: the {mo:02d}/{d:02d} transaction does not match the running balance"
+        states = nxt
+    if end not in states:
+        return None, "does not reconcile: the last running balance is not the Ending Balance"
+    if states[end] is None:
+        return None, "more than one reading of the amounts fits the running balance"
+    out = []
+    for mo, d, desc, notes, amount in states[end]:
+        year = closing.year - 1 if (mo, d) > (closing.month, closing.day) else closing.year
+        out.append((f"{year:04d}-{mo:02d}-{d:02d}", desc, " ".join(notes), amount, None))
+    return {"rows": out, "skipped": 0, "recon": (begin, end),
+            "period": (opening.isoformat(), closing.isoformat())}, None
+
+
 def convert_pdf(path):
     try:
         import pypdf  # noqa: F401
@@ -205,10 +315,14 @@ def convert_pdf(path):
         lines = pdf_lines(path)
     except Exception as e:
         return None, None, f"could not read PDF: {e}"
+    bank = "chase-card-pdf"
     result, err = parse_chase_pdf(lines)
+    if err and err.startswith("not a recognized"):
+        bank = "chase-bank-pdf"
+        result, err = parse_chase_checking_pdf(lines)
     if err:
-        return None, None, f"{err}. Only Chase credit-card statement PDFs are supported; for other banks download the CSV export."
-    return "chase-card-pdf", result, None
+        return None, None, f"{err}. Only Chase credit-card and checking statement PDFs are supported; for other banks download the CSV export."
+    return bank, result, None
 
 
 def convert(path):
@@ -302,6 +416,18 @@ def merge_rows(per_file_rows):
     return sorted(merged, key=lambda r: r[:4])
 
 
+def balance_chain_notes(statements):
+    """Informational notes on (start, end, beginning balance, ending balance) statements:
+    the dates covered and every place one Ending Balance isn't the next Beginning Balance.
+    Non-consecutive inputs are legitimate, so breaks are reported, never enforced."""
+    stmts = sorted(statements)
+    breaks = [f"NOTE  balance chain breaks between the statement ending {a[1]} and the one starting {b[0]}"
+              " (expected if those months come from other files; otherwise a statement is missing)"
+              for a, b in zip(stmts, stmts[1:]) if a[3] != b[2]]
+    status = f"{len(breaks)} break(s) in the balance chain" if breaks else "balances chain with no gaps"
+    return [f"NOTE  {len(stmts)} checking PDF statements cover {stmts[0][0]} to {stmts[-1][1]}; {status}"] + breaks
+
+
 def shape_row(row, fmt):
     date, payee, notes, amount, ref = row
     if fmt == "generic":
@@ -332,7 +458,7 @@ def main():
     if args.outdir:
         args.outdir.mkdir(parents=True, exist_ok=True)
 
-    per_file_rows, failures = [], 0
+    per_file_rows, chain, failures = [], [], 0
     for path in args.files:
         if not path.exists():
             print(f"SKIP  {path}: not found")
@@ -358,6 +484,10 @@ def main():
         elif bank == "chase-card-pdf":
             prev, new_bal = result["recon"]
             line += f" | reconciled: previous balance {prev / 100:.2f} -> new balance {new_bal / 100:.2f}"
+        elif bank == "chase-bank-pdf":
+            begin, end = result["recon"]
+            line += f" | reconciled: beginning balance {begin} -> ending balance {end}"
+            chain.append((*result["period"], begin, end))
         print(line)
         per_file_rows.append(rows)
 
@@ -367,6 +497,8 @@ def main():
         out_path = outdir / f"{args.merge}-{args.format}.csv"
         write_out(out_path, rows, args.format)
         print(f"MERGE -> {out_path}  {len(rows)} txns from {len(per_file_rows)} files")
+        if len(chain) > 1:
+            print("\n".join(balance_chain_notes(chain)))
 
     sys.exit(1 if failures else 0)
 
